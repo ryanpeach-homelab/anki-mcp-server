@@ -85,6 +85,13 @@ describe("E2E: MCP Tools (HTTP Streamable)", () => {
       expect((result.deckId as number) > 0).toBe(true);
     });
 
+    it("should create a deeply nested deck (4 levels) via createDeck", () => {
+      const deckName = `HTTP::Deep::Nested::L4_${uniqueId()}`;
+      const result = callTool("createDeck", { deckName: deckName });
+      expect(result).toHaveProperty("deckId");
+      expect((result.deckId as number) > 0).toBe(true);
+    });
+
     it("should return existing deck ID when creating duplicate via createDeck", () => {
       const deckName = `HTTP::Exist${uniqueId()}`;
       const result1 = callTool("createDeck", { deckName: deckName });

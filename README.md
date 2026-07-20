@@ -51,7 +51,7 @@ The server exposes **42 MCP tools** — 31 essential tools for everyday Anki ope
 #### Deck Management
 - `listDecks` - List all decks, optionally with per-deck card-count statistics
 - `deckStats` - Get comprehensive statistics for a single deck (counts, ease/interval distributions)
-- `createDeck` - Create a new empty deck (supports `Parent::Child`, max 2 levels)
+- `createDeck` - Create a new empty deck (supports `Parent::Child::Grandchild` nesting at any depth)
 - `changeDeck` - Move cards to a different deck (created if it doesn't exist)
 
 #### Note Management

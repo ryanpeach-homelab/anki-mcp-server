@@ -4,7 +4,7 @@ import { AnkiConnectClient } from "@/mcp/clients/anki-connect.client";
  * Parameters for createDeck action
  */
 export interface CreateDeckParams {
-  /** The name of the deck to create. Use "::" for parent::child structure (max 2 levels) */
+  /** The name of the deck to create. Use "::" to nest decks (e.g., "Languages::Japanese::JLPT::N5") */
   deckName: string;
 }
 
@@ -20,16 +20,16 @@ export interface CreateDeckResult {
   exists?: boolean;
   parentDeck?: string;
   childDeck?: string;
-  /** For parent::child names, whether the parent deck already existed before this call */
+  /** For nested names, whether the immediate parent deck already existed before this call */
   parentExisted?: boolean;
 }
 
 /**
  * Create a new empty Anki deck
  *
- * Supports parent::child structure (e.g., "Japanese::Tokyo" creates parent deck
- * "Japanese" and child deck "Tokyo"). Maximum 2 levels of nesting allowed.
- * Will not overwrite existing decks.
+ * Supports nested deck names of any depth using "::" separators (e.g.,
+ * "Languages::Japanese::JLPT::N5" creates every missing ancestor deck along
+ * the way, matching Anki's own behavior). Will not overwrite existing decks.
  *
  * @see https://git.sr.ht/~foosoft/anki-connect#createdeck
  */
@@ -39,25 +39,25 @@ export async function createDeck(
 ): Promise<CreateDeckResult> {
   const { deckName } = params;
 
-  // Validate deck name doesn't have more than 2 levels
   const parts = deckName.split("::");
-  if (parts.length > 2) {
-    throw new Error("Deck name can have maximum 2 levels (parent::child)");
-  }
 
   // Check for empty parts
   if (parts.some((part) => part.trim() === "")) {
     throw new Error("Deck name parts cannot be empty");
   }
 
-  // For parent::child, determine whether the parent already exists so we can
-  // report accurately (AnkiConnect's createDeck is happy to "create" an
+  const isNested = parts.length > 1;
+  const parentName = isNested ? parts.slice(0, -1).join("::") : undefined;
+  const childName = isNested ? parts[parts.length - 1] : undefined;
+
+  // For nested names, determine whether the immediate parent already exists so
+  // we can report accurately (AnkiConnect's createDeck is happy to "create" an
   // already-existing parent silently, so the response otherwise lies).
   let parentExisted: boolean | undefined;
-  if (parts.length === 2) {
+  if (isNested && parentName !== undefined) {
     try {
       const existingDecks = await client.invoke<string[]>("deckNames");
-      parentExisted = existingDecks.includes(parts[0]);
+      parentExisted = existingDecks.includes(parentName);
     } catch {
       // If we can't enumerate decks, fall through without parentExisted info.
       parentExisted = undefined;
@@ -82,9 +82,9 @@ export async function createDeck(
         created: false,
         exists: true,
       };
-      if (parts.length === 2) {
-        result.parentDeck = parts[0];
-        result.childDeck = parts[1];
+      if (isNested) {
+        result.parentDeck = parentName;
+        result.childDeck = childName;
         if (parentExisted !== undefined) {
           result.parentExisted = parentExisted;
         }
@@ -103,19 +103,19 @@ export async function createDeck(
     created: true,
   };
 
-  // If it's a parent::child structure, report honestly whether the parent was
+  // If it's a nested structure, report honestly whether the parent chain was
   // created here or already existed.
-  if (parts.length === 2) {
-    result.parentDeck = parts[0];
-    result.childDeck = parts[1];
+  if (isNested) {
+    result.parentDeck = parentName;
+    result.childDeck = childName;
     if (parentExisted !== undefined) {
       result.parentExisted = parentExisted;
       result.message = parentExisted
-        ? `Found existing parent deck "${parts[0]}"; created child deck "${parts[1]}"`
-        : `Created parent deck "${parts[0]}" and child deck "${parts[1]}"`;
+        ? `Found existing parent deck "${parentName}"; created child deck "${childName}"`
+        : `Created parent deck "${parentName}" and child deck "${childName}"`;
     } else {
       // Couldn't determine parent status — fall back to neutral wording.
-      result.message = `Created child deck "${parts[1]}" under parent "${parts[0]}"`;
+      result.message = `Created child deck "${childName}" under parent "${parentName}"`;
     }
   }
 

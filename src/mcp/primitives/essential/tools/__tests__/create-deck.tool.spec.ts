@@ -77,15 +77,50 @@ describe("CreateDeckTool", () => {
     expect(result.message).toContain('created child deck "Spanish"');
   });
 
-  it("should reject deck with more than 2 levels", async () => {
+  it("should create a deeply nested deck (3+ levels)", async () => {
     const deckName = "Languages::Spanish::Vocabulary";
+    const deckId = 1651445861973;
+
+    ankiClient.invoke
+      .mockResolvedValueOnce(["Languages"]) // deckNames - immediate parent missing
+      .mockResolvedValueOnce(deckId); // createDeck
 
     const rawResult = await tool.execute({ deckName });
     const result = parseToolResult(rawResult);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("maximum 2 levels");
-    expect(ankiClient.invoke).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.deckId).toBe(deckId);
+    expect(result.deckName).toBe(deckName);
+    expect(result.parentDeck).toBe("Languages::Spanish");
+    expect(result.childDeck).toBe("Vocabulary");
+    expect(result.parentExisted).toBe(false);
+    expect(ankiClient.invoke).toHaveBeenCalledWith("createDeck", {
+      deck: deckName,
+    });
+  });
+
+  it("should report existing parent chain for deeply nested decks", async () => {
+    const deckName = "Languages::Spanish::Vocabulary::Animals";
+    const deckId = 1651445861974;
+
+    ankiClient.invoke
+      .mockResolvedValueOnce([
+        "Languages",
+        "Languages::Spanish",
+        "Languages::Spanish::Vocabulary",
+      ]) // deckNames - full parent chain exists
+      .mockResolvedValueOnce(deckId); // createDeck
+
+    const rawResult = await tool.execute({ deckName });
+    const result = parseToolResult(rawResult);
+
+    expect(result.success).toBe(true);
+    expect(result.parentDeck).toBe("Languages::Spanish::Vocabulary");
+    expect(result.childDeck).toBe("Animals");
+    expect(result.parentExisted).toBe(true);
+    expect(result.message).toContain(
+      'Found existing parent deck "Languages::Spanish::Vocabulary"',
+    );
   });
 
   it("should reject deck name with empty parts", async () => {
